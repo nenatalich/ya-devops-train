@@ -1,0 +1,27 @@
+- name: Copy server.conf
+  ansible.builtin.copy:
+    src: master.conf
+    dest: /etc/postgresql/14/main/conf.d/server.conf
+    owner: postgres
+    group: postgres
+    mode: 0644
+  notify: restart postgres
+  become: true
+
+- name: create ROLE replication
+  postgresql_user:
+    name: replication
+    password: "{{ replicant_pass }}"
+    role_attr_flags: LOGIN,REPLICATION
+  become_user: postgres
+
+- name: Allow connection for user replication
+  postgresql_pg_hba:
+    dest: "/etc/postgresql/14/main/pg_hba.conf"
+    address: "{{ hostvars['db-slave'].ansible_host }}/32"
+    contype: host
+    databases: replication
+    method: scram-sha-256
+    users: "replication"
+  become_user: postgres
+  notify: restart postgres

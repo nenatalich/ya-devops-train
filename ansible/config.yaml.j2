@@ -1,0 +1,10 @@
+student_email: {{ student_email }}
+postgres_cluster:
+  hosts:
+  - address: {{ db_address_master }}
+    port: 5432
+  user: {{ db_user }}
+  password: {{ db_password }}
+  db_name: {{ db_name }}
+  ssl_mode: disable
+  use_closest_node: false

@@ -1,0 +1,61 @@
+- name: Stop postgres
+  ansible.builtin.service:
+    name: postgresql
+    state: stopped
+
+# - name: Copy pgpass
+#   ansible.builtin.template:
+#     src: pgpass.j2
+#     dest: //var/lib/postgresql/.pgpass
+#     owner: postgres
+#     group: postgres
+#     mode: 0600
+#   become: true
+
+- name: Copy server.conf
+  ansible.builtin.copy:
+    src: master.conf
+    dest: /etc/postgresql/14/main/conf.d/server.conf
+    owner: postgres
+    group: postgres
+    mode: 0644
+  become: true
+
+# - name: Clear postgresql data
+#   ansible.builtin.shell: rm -rf /var/lib/postgresql/14/main/*
+#
+# - name: Copy postgresql data from master
+#   ansible.builtin.shell: pg_basebackup -R -h {{ hostvars['db-master'].ansible_host }} -U replication -D /var/lib/postgresql/14/main -P
+#   become: true
+#   become_user: postgres
+#
+# - name: Allow connection for user bingo
+#   postgresql_pg_hba:
+#     dest: "/etc/postgresql/14/main/pg_hba.conf"
+#     address: all
+#     contype: host
+#     databases: "{{ db_name }}"
+#     method: md5
+#     users: "{{ db_user }}"
+#   become_user: postgres
+
+- name: Start postgres
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+
+# - name: Create db user
+#   postgresql_user:
+#     state: present
+#     name: "{{ db_user }}"
+#     password: "{{ db_password }}"
+#   become_user: postgres
+#
+# - name: Grant db user access to app db
+#   postgresql_privs:
+#     type: database
+#     database: "{{ db_name }}"
+#     roles: "{{ db_user }}"
+#     grant_option: no
+#     privs: all
+#   become_user: postgres

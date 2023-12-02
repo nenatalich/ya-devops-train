@@ -1,0 +1,207 @@
+- name: Wait for hosts is ready to connect
+  hosts: all
+  gather_facts: false
+  pre_tasks:
+    - name: Wait
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+- name: Install Postgres
+  hosts: db
+  become: true
+  vars_files:
+    - db_vars.yaml
+  roles:
+    - role: install_postgre
+
+- name: Configure Postgres master
+  hosts: db-master
+  become: true
+  vars_files:
+    - db_vars.yaml
+  roles:
+    - role: configure_postgre
+      vars:
+        db_role_type: master
+
+- name: Configure Postgres slave
+  hosts: db-slave
+  become: true
+  vars_files:
+    - db_vars.yaml
+  roles:
+    - role: configure_postgre
+      vars:
+        db_role_type: slave
+
+- name: Prepare bingo scheme and run migrations
+  hosts: db-master
+  become: true
+  vars_files:
+    - db_vars.yaml
+  tasks:
+    - name: Create app database
+      postgresql_db:
+        state: present
+        name: "{{ db_name }}"
+      become_user: postgres
+
+    - name: Create db user
+      postgresql_user:
+        state: present
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+      become_user: postgres
+
+    - name: Grant db user access to app db
+      postgresql_privs:
+        type: database
+        database: "{{ db_name }}"
+        roles: "{{ db_user }}"
+        grant_option: no
+        privs: all
+      become_user: postgres
+
+    - name: Allow connection for user
+      postgresql_pg_hba:
+        dest: "/etc/postgresql/14/main/pg_hba.conf"
+        address: all
+        contype: host
+        databases: "{{ db_name }}"
+        method: md5
+        users: "{{ db_user }}"
+      become_user: postgres
+      notify: restart postgres
+
+    - name: Copy sql file
+      ansible.builtin.copy:
+        src: ../services/postgres/create_scheme.sql
+        dest: /tmp/create_scheme.sql
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0777
+
+    - name: Run sql script for create scheme and indexes
+      ansible.builtin.shell: psql {{ db_name }} < /tmp/create_scheme.sql
+      become_user: postgres
+
+  handlers:
+    - name: restart postgres
+      ansible.builtin.service:
+        name: postgresql
+        state: restarted
+      become: true
+
+- name: Copy bingo services to vms
+  hosts: app
+  become: true
+  vars_files:
+    - db_vars.yaml
+  tasks:
+    - name: Create bingo directory
+      ansible.builtin.file:
+        path: /opt/bingo
+        state: directory
+        recurse: true
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0755
+
+    - name: Copy bingo config file
+      ansible.builtin.template:
+        src: config.yaml.j2
+        dest: /opt/bingo/config.yaml
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0664
+      vars:
+        - db_address_master: "{{ hostvars['db-master'].ansible_host }}"
+
+    - name: Copy promtail config file
+      ansible.builtin.copy:
+        src: ../services/monitoring/config/promtail-bingo.yaml
+        dest: /opt/bingo/promtail-bingo.yaml
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0664
+
+    - name: Copy docker-compose file
+      ansible.builtin.copy:
+        src: ../services/bingo/docker-compose.yaml
+        dest: /opt/bingo/docker-compose.yaml
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0777
+
+    - name: Copy docker-compose-migrations file
+      ansible.builtin.copy:
+        src: ../services/bingo/docker-compose-migrations.yaml
+        dest: /opt/bingo/docker-compose-migrations.yaml
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0777
+
+
+- name: Docker login
+  hosts: app
+  tasks:
+    - name: Copy service account key
+      ansible.builtin.copy:
+        src: "{{ ya_service_account_key_file }}"
+        dest: /home/ubuntu/key.json
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0777
+
+    - name: run docker login
+      ansible.builtin.shell: cat /home/ubuntu/key.json | docker login --username json_key --password-stdin cr.yandex
+
+- name: Run migrations
+  hosts: bingo-1
+  tasks:
+    - name: Run (this step is too long, please wait)
+      ansible.builtin.shell: docker-compose -f /opt/bingo/docker-compose-migrations.yaml run bingo
+
+
+- name: Run bingo
+  hosts: app
+  tasks:
+    - name: block google dns
+      ansible.builtin.shell: iptables -I DOCKER-USER -d 8.8.8.8 -p tcp -j REJECT --reject-with icmp-host-prohibited
+      become: true
+    - name: Run bingo
+      ansible.builtin.shell: LOKI_HOST="{{ hostvars['monitoring-1'].ansible_host }}" docker-compose -f /opt/bingo/docker-compose.yaml up -d
+
+- name: Install nginx
+  hosts: nginx
+  become: true
+
+  tasks:
+    - name: Install nginx via apt
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+    - name: Start nginx and turn on start on boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+- name: Configure nginx
+  hosts: nginx
+  roles:
+    - role: configure_nginx
+      vars:
+        nginx_vhost_conf:
+          vhost:
+            name: "{{ hostvars['nginx-1'].ansible_host }}"
+            port: 80
+            location:
+              proxy_pass: http://app
+            cache_endpoint:
+              name: long_dummy
+              time_valid: 1m
+          upstream:
+            name: app
+            upstream_ips: "{{ groups['app'] | map('extract', hostvars, ['ansible_host']) }}"

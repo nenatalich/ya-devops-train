@@ -1,0 +1,22 @@
+---
+- name: Copy virtualhost conf file
+  ansible.builtin.template:
+    src: example.com.conf.j2
+    dest: /etc/nginx/conf.d/bingo.conf
+    mode: 0664
+  notify: Reload nginx
+  become: true
+
+- name: Create cache dir
+  ansible.builtin.file:
+    path: /data/nginx/cache
+    state: directory
+    recurse: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: 0755
+  become: true
+
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,52 @@
+{% if nginx_vhost_conf.upstream is defined %}
+upstream {{ nginx_vhost_conf.upstream.name }}{
+{% for ip in nginx_vhost_conf.upstream.upstream_ips %}
+    server {{ ip }}:22974;
+{% endfor %}
+}
+{% endif %}
+
+{% if nginx_vhost_conf.vhost.cache_endpoint.name is defined %}
+proxy_cache_path /data/nginx/cache keys_zone=my_zone:10m inactive=1h max_size=1g;
+{% endif %}
+
+server {
+    listen              {{ nginx_vhost_conf.vhost.port }};
+    server_name         {{ nginx_vhost_conf.vhost.name }};
+    {% if nginx_vhost_conf.vhost.root_directory is defined %}
+    root                {{ root_directory }};
+    {% endif %}
+
+{% if nginx_vhost_conf.vhost.cache_endpoint.name is defined %}
+    location /{{ nginx_vhost_conf.vhost.cache_endpoint.name }} {
+        proxy_pass {{ nginx_vhost_conf.vhost.location.proxy_pass }};
+        proxy_cache my_zone;
+        proxy_cache_methods GET;
+        proxy_cache_key "$host$request_uri";
+        proxy_cache_valid 200 {{ nginx_vhost_conf.vhost.cache_endpoint.time_valid }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+{% endif %}
+
+{% if nginx_vhost_conf.vhost.location is defined %}
+    location /api/session {
+        proxy_pass {{ nginx_vhost_conf.vhost.location.proxy_pass }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+    }
+    location / {
+        {% if nginx_vhost_conf.vhost.location.proxy_pass is defined %}
+        proxy_pass {{ nginx_vhost_conf.vhost.location.proxy_pass }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+        {% endif %}
+    }
+{% endif %}
+}

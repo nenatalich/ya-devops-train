@@ -1,0 +1,14 @@
+version: '3.7'
+services:
+  bingo:
+    container_name: bingo_prepare_db
+    image: cr.yandex/crpfelt8pck0ot575r51/bingo:latest
+    restart: always
+    ports:
+     - 22974:22974
+    user: "bingo:bingo"
+    read_only: true
+    command: ["./bingo", "prepare_db"]
+    volumes:
+      - ./config.yaml:/opt/bingo/config.yaml
+      - /etc/localtime:/etc/localtime:ro

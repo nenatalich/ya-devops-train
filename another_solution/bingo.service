@@ -1,0 +1,15 @@
+[Unit]
+Description=App Bingo Service
+ConditionPathExists=/opt/bingo/
+After=network.target
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+WorkingDirectory=/opt/bingo/
+ExecStart=/opt/bingo/bingo run_server
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target

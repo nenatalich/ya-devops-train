@@ -1,0 +1,19 @@
+---
+- name: Install packages
+  ansible.builtin.apt:
+    pkg:
+      - postgresql-14
+      - postgresql-contrib-14
+      - python3-pip
+    state: present
+    update_cache: true
+
+- name: Install psycopg2 for ansible postgresql_db module
+  ansible.builtin.pip:
+    name: psycopg2-binary
+
+- name: Start postgres and enable
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+    enabled: true

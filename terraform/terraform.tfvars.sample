@@ -1,0 +1,20 @@
+# yandex cloud service account file
+service_account_key_file    = ""
+# yandex cloud id
+cloud_id                    = ""
+# yandex folder id
+folder_id                   = ""
+
+# your public key for instances
+public_key_file_path        = ""
+# your private key fo instances. Ansible use it
+private_key_file_path       = ""
+student_email               = ""
+
+# another yandex cloud service account file only with "docker pull" privileges, it use on instances
+ya_service_account_key_file = ""
+
+# pass for database. App use it
+db_password                 = ""
+# pass for postgresql replication user
+replicant_pass              = ""

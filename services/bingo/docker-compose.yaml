@@ -1,0 +1,57 @@
+version: '3.7'
+services:
+  bingo:
+    container_name: bingo
+    image: cr.yandex/crpfelt8pck0ot575r51/bingo:latest
+    restart: always
+    ports:
+     - 22974:22974
+    user: "bingo:bingo"
+    read_only: true
+    volumes:
+      - ./config.yaml:/opt/bingo/config.yaml
+      - logs-bingo-bongo:/opt/bongo/logs/c457cc00f8/:rw
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+    networks:
+      - bingo
+
+  autoheal:
+    restart: always
+    image: willfarrell/autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+    networks:
+      - bingo
+
+  promtail:
+    container_name: promtail
+    image: grafana/promtail:2.8.2
+    restart: always
+    volumes:
+      - ./promtail-bingo.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - logs-bingo-bongo:/var/log/bingo/:ro
+      - /etc/localtime:/etc/localtime:ro
+    command: -config.file=/etc/promtail/docker-config.yaml -config.expand-env=true
+    environment:
+      - LOKI_HOST=10.5.0.25
+    networks:
+      - bingo
+
+
+volumes:
+  logs-bingo-bongo:
+
+networks:
+  bingo:
+    name: bingo

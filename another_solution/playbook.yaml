@@ -1,0 +1,86 @@
+- name: Prepare vm to run bingo service
+  hosts: db-master
+  become: true
+  vars_files:
+    - db_vars.yaml
+  tasks:
+    - name: Create bingo directory
+      ansible.builtin.file:
+        path: /opt/bingo
+        state: directory
+        recurse: true
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0755
+    - name: Create bongo logs directory
+      ansible.builtin.file:
+        path: /opt/bongo
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0755
+
+    - name: Get name for user log dir
+      ansible.builtin.shell: echo -n {{ student_email }} | sha1sum | head -c 10
+      register: user_dir_name
+
+    - name: Create user specified logs directory
+      ansible.builtin.file:
+        path: /opt/bongo/logs/{{ user_dir_name.stdout }}
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0755
+
+    - name: Copy bingo binary
+      ansible.builtin.copy:
+        src: ../src/bingo
+        dest: /opt/bingo/bingo
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0765
+
+    - name: Copy bingo config file
+        ansible.builtin.template:
+          src: config.yaml.j2
+          dest: /opt/bingo/config.yaml
+          owner: "{{ ansible_user }}"
+          group: "{{ ansible_user }}"
+          mode: 0664
+        vars:
+          - db_address: localhost
+
+    - name: Run migrations
+
+- name: Create bingo systemd service
+  hosts: app
+  become: true
+  vars_files:
+    - db_vars.yaml
+  tasks:
+    - name: Copy bingo config file
+      ansible.builtin.template:
+        src: config.yaml.j2
+        dest: /opt/bingo/config.yaml
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: 0664
+      vars:
+        - db_address: "{{ hostvars['db-master'].ansible_host }}"
+
+    - name: Copy systemd service file
+      ansible.builtin.copy:
+        src: ../src/bingo.service
+        dest: /etc/systemd/system/bingo.service
+        mode: 0777
+    - name: Just force systemd to reread configs
+      ansible.builtin.shell: systemctl daemon-reload
+
+    - name: Enable service bingo
+      ansible.builtin.shell: systemctl enable bingo.service
+
+    - name: Start bingo service
+      ansible.builtin.service:
+        name: bingo
+        state: started
+        enabled: true

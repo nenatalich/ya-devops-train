@@ -1,0 +1,28 @@
+---
+all:
+  children:
+    app:
+      hosts:
+        bingo-1:
+          ansible_host: ${bingo-1}
+        bingo-2:
+          ansible_host: ${bingo-2}
+    nginx:
+      hosts:
+        nginx-1:
+          ansible_host: ${nginx}
+    db:
+      hosts:
+        db-master:
+          ansible_host: ${db-master}
+        db-slave:
+          ansible_host: ${db-slave}
+    monitoring:
+      hosts:
+        monitoring-1:
+          ansible_host: ${monitoring}
+  vars:
+    ansible_ssh_private_key_file: ${private_key_file}
+    ansible_user: ubuntu
+    student_email: ${student_email}
+    ya_service_account_key_file: ${ya_service_account_key_file}
